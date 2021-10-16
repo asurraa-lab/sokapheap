@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 import 'package:health/health.dart';
 
 class HomePage extends StatefulWidget {
@@ -13,6 +14,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   List<HealthDataPoint> _healthDataList = [];
   HealthFactory health = HealthFactory();
+  bool loading = false;
 
   List<HealthDataType> types = [
     HealthDataType.STEPS,
@@ -23,6 +25,9 @@ class _HomePageState extends State<HomePage> {
   ];
 
   Future onFetchHealthData() async {
+    setState(() {
+      loading = true;
+    });
     if (Platform.isAndroid) {
       types.remove(HealthDataType.DISTANCE_WALKING_RUNNING);
     }
@@ -31,19 +36,35 @@ class _HomePageState extends State<HomePage> {
     DateTime endDate = DateTime(2022);
 
     if (accessWasGranted) {
-      print("Access granted");
       try {
         List<HealthDataPoint> healthData = await health.getHealthDataFromTypes(startDate, endDate, types);
-        print(healthData.length);
         _healthDataList.addAll(healthData);
         _healthDataList = HealthFactory.removeDuplicates(_healthDataList);
+        if (_healthDataList.isEmpty) {
+          showToast("You don't have any health data");
+        }
         setState(() {});
       } catch (e) {
-        print(e);
+        showToast(e);
       }
     } else {
-      print("Access not granted");
+      showToast("Access not granted");
     }
+    setState(() {
+      loading = false;
+    });
+  }
+
+  void showToast(dynamic message) {
+    Fluttertoast.showToast(
+      msg: message.toString(),
+      toastLength: Toast.LENGTH_SHORT,
+      gravity: ToastGravity.CENTER,
+      timeInSecForIosWeb: 1,
+      backgroundColor: Colors.red,
+      textColor: Colors.white,
+      fontSize: 16.0,
+    );
   }
 
   @override
@@ -59,19 +80,35 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
       ),
-      body: _healthDataList.isNotEmpty
-          ? Column(
-              children: [
-                for (var data in _healthDataList)
-                  ListTile(
-                    title: Text("Source: ${data.sourceName}"),
-                    subtitle: Text("${data.typeString}: ${data.value} ${data.unitString}"),
-                  ),
-              ],
-            )
-          : const Center(
-              child: Text("Press download button to download health data"),
-            ),
+      body: loading
+          ? const Center(child: CircularProgressIndicator())
+          : _healthDataList.isNotEmpty
+              ? ListView.separated(
+                  separatorBuilder: (context, index) => const Divider(),
+                  itemCount: _healthDataList.length,
+                  itemBuilder: (BuildContext context, int index) {
+                    final data = _healthDataList[index];
+                    return ListTile(
+                      leading: Icon(
+                        Icons.favorite,
+                        color: Colors.red,
+                      ),
+                      title: Text("Source: ${data.sourceName}"),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 16),
+                          Text("${data.dateFrom.toLocal()}"),
+                          const SizedBox(height: 8),
+                          Text("${data.typeString}: ${data.value} ${data.unitString}"),
+                        ],
+                      ),
+                    );
+                  },
+                )
+              : const Center(
+                  child: Text("Press download button to download health data"),
+                ),
     );
   }
 }
